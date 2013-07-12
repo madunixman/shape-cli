@@ -1,0 +1,226 @@
+#! /bin/bash 
+
+# Paolo Lulli 2012
+
+MAX_RECURSE=20
+CURRENT_DIR=$(pwd)
+cd $(dirname $0)
+
+CURR_DIR=$(pwd)
+TMPL_DIR=$CURR_DIR/templates
+SYNC_TYPE=rsync
+#SYNC_TYPE=scp
+
+HBF_DISTRO_NAME="hbf"
+HBF_DISTRO_VERSION="1.0"
+#HBF_PACKAGES_DIR="/Users/paolo/dev/code.hackbook.org/hbf/dist/packages"
+HBF_PACKAGES_DIR=$HOME"/.shape/packages"
+
+#/home2/dbthunde/public_html/src/dist/hbf
+HBF_PACKAGES_REMOTE_URL="http://src.lulli.net/dist/shape"
+#HBF_PACKAGES_REMOTE_URL="http://src.dbthunder.com/dist/shape"
+
+hbf_targz_backend=$HBF_DISTRO_NAME-$HBF_DISTRO_VERSION-server-backend.tar.gz
+hbf_targz_frontend=$HBF_DISTRO_NAME-$HBF_DISTRO_VERSION-server-frontend.tar.gz
+hbf_targz_gateway=$HBF_DISTRO_NAME-$HBF_DISTRO_VERSION-server-gateway.tar.gz
+
+
+test -d $HBF_PACKAGES_DIR || mkdir -p $HBF_PACKAGES_DIR
+
+
+
+test  -f "$HBF_PACKAGES_DIR/$hbf_targz_backend"  || wget $HBF_PACKAGES_REMOTE_URL/$hbf_targz_backend  -O $HBF_PACKAGES_DIR/$hbf_targz_backend
+test  -f "$HBF_PACKAGES_DIR/$hbf_targz_frontend" || wget $HBF_PACKAGES_REMOTE_URL/$hbf_targz_frontend -O $HBF_PACKAGES_DIR/$hbf_targz_frontend
+test  -f "$HBF_PACKAGES_DIR/$hbf_targz_gateway"  || wget $HBF_PACKAGES_REMOTE_URL/$hbf_targz_gateway  -O $HBF_PACKAGES_DIR/$hbf_targz_gateway
+
+OP="init try tryi1"
+
+
+distribute_content(){
+	scp $HBF_PACKAGES_DIR/$hbf_targz_backend 	$remote_user@$remote_host:$remote_backend_dir/$project_name
+	scp $HBF_PACKAGES_DIR/$hbf_targz_frontend 	$remote_user@$remote_host:$remote_frontend_dir/$project_name
+	scp $HBF_PACKAGES_DIR/$hbf_targz_gateway 	$remote_user@$remote_host:$remote_gateway_dir/$project_name
+}
+
+unpack_content(){
+	ssh $remote_user@$remote_host "cd $remote_backend_dir/$project_name;  tar vxzf $hbf_targz_backend  && rm -f $hbf_targz_backend"
+	ssh $remote_user@$remote_host "cd $remote_frontend_dir/$project_name; tar vxzf $hbf_targz_frontend && rm -f $hbf_targz_frontend"
+	ssh $remote_user@$remote_host "cd $remote_gateway_dir/$project_name;  tar vxzf $hbf_targz_gateway  && rm -f $hbf_targz_gateway"
+}
+
+make_remote_dirs(){
+	ssh $remote_user@$remote_host "mkdir -p $remote_backend_dir/$project_name"
+	ssh $remote_user@$remote_host "mkdir -p $remote_gateway_dir/$project_name"
+	ssh $remote_user@$remote_host "mkdir -p $remote_frontend_dir/$project_name"
+}
+
+uninstall_from_remote(){
+	if [[ "$remote_backend_dir" != ""  &&  "$remote_backend_dir" != "/" ]]; then
+		ssh $remote_user@$remote_host "rm -fr $remote_backend_dir/$project_name"
+	fi
+	if [[ "$remote_gateway_dir" != ""  &&  "$remote_gateway_dir" != "/" ]]; then
+		ssh $remote_user@$remote_host "rm -fr $remote_gateway_dir/$project_name"
+	fi
+	if [[ "$remote_frontend_dir" != ""  &&  "$remote_frontend_dir" != "/" ]]; then
+		ssh $remote_user@$remote_host "rm -fr $remote_frontend_dir/$project_name"
+	fi
+}
+undeploy_web(){
+	if [[ "$remote_frontend_dir" != ""  &&  "$remote_frontend_dir" != "/" ]]; then
+		ssh $remote_user@$remote_host "rm -fr $remote_frontend_dir/$project_name/*"
+	fi
+}
+
+write_config(){
+	PRJNAME=$1
+	echo "project_name=$PRJNAME">.shape.config
+	echo "remote_host=$remote_host">>.shape.config
+	echo "remote_user=$remote_user">>.shape.config
+	echo "remote_frontend_dir=$remote_frontend_dir">>.shape.config
+	echo "remote_backend_dir=$remote_backend_dir">>.shape.config
+	echo "remote_gateway_dir=$remote_gateway_dir">>.shape.config
+}
+
+read_params(){
+	echo "Remote machine:"
+	read remote_host
+	echo "Remote user:"
+	read remote_user
+	echo "Remote frontend dir:"
+	read remote_frontend_dir
+	echo "Remote backend dir:"
+	read remote_backend_dir
+	remote_gateway_dir=$remote_backend_dir
+}
+
+configure_project(){
+PRJNAME=$1
+
+echo REMOTE_BACKEND_USER=$remote_user	> server.cfg
+echo REMOTE_BACKEND_MACHINE=$remote_host >> server.cfg
+echo REMOTE_BACKEND_INSTALL_DIR=$remote_backend_dir/$PRJNAME >> server.cfg
+echo >> server.cfg
+echo REMOTE_GATEWAY_USER=$remote_user >> server.cfg
+echo REMOTE_GATEWAY_MACHINE=$remote_host >> server.cfg
+echo REMOTE_GATEWAY_INSTALL_DIR=$remote_gateway_dir/$PRJNAME >> server.cfg
+echo >> server.cfg
+echo REMOTE_FRONTEND_USER=$remote_user >> server.cfg
+echo REMOTE_FRONTEND_MACHINE=$remote_host >> server.cfg
+echo REMOTE_FRONTEND_INSTALL_DIR=$remote_frontend_dir/$PRJNAME >> server.cfg
+echo >> server.cfg
+echo REMOTE_WEB_USER=$remote_user >> server.cfg
+echo REMOTE_WEB_MACHINE=$remote_host >> server.cfg
+echo REMOTE_WEB_INSTALL_DIR=$remote_frontend_dir/$PRJNAME >> server.cfg
+
+}
+
+
+RECURSE=0
+if [ "$#" == "1" ]; then
+	cd $CURRENT_DIR
+	while [ ! -f "./.shape.config" ]; do
+		pwd
+		echo "UP ONE DIR";
+		RECURSE=$(expr $RECURSE + 1)
+		if  [ $RECURSE == $MAX_RECURSE ]; then
+			break;
+		fi
+		cd ..
+	done
+	if [ -f "./.shape.config" ]; then
+		SHAPE_ROOT=$(pwd)
+		cd $SHAPE_ROOT
+		source .shape.config
+		#break;
+	else
+		echo "NO SHAPE PROJECT" 
+		exit -1
+	fi
+	COMMAND=$1
+fi
+
+echo "ROOT= $SHAPE_ROOT"
+#if [ $# == 2 ]; then
+	#echo "Usage: $0 <command> <project-name>"
+#else 
+	COMMAND=$1
+	PROJECT_NAME=$2
+	if [ "$COMMAND" == "init" ]; then
+		echo "Init for project: [$PROJECT_NAME]"
+		test -d $CURRENT_DIR/$PROJECT_NAME || mkdir -p $CURRENT_DIR/$PROJECT_NAME
+		cd $CURRENT_DIR/$PROJECT_NAME;
+		mkdir web
+		read_params;
+		configure_project $PROJECT_NAME;
+	#cp $TMPL_DIR/Makefile .
+		write_config    $PROJECT_NAME;
+	fi
+	if [ "$SHAPE_ROOT" == "" ]; then
+		cd $CURRENT_DIR/$PROJECT_NAME;
+	else 
+		cd $SHAPE_ROOT
+	fi
+
+	if [ "$COMMAND" == "dist" ]; then
+		#cd $PROJECT_NAME;
+		#cd $CURRENT_DIR/$PROJECT_NAME;
+		source .shape.config
+		make_remote_dirs
+		distribute_content
+		unpack_content
+	fi
+	if [ "$COMMAND" == "mysql-backup" ]; then
+		source .shape.config
+		ssh $remote_user@$remote_host "mysqldump -u $db_user $db_instance --password=$db_password > $remote_backend_dir/$project_name/mysql_backup.sql "
+		scp $remote_user@$remote_host:$remote_backend_dir/$project_name/mysql_backup.sql .
+	fi
+	if [ "$COMMAND" == "mysql-connect" ]; then
+		source .shape.config
+		mysql -h $remote_host -u $db_user $db_instance --password=$db_password 
+	fi
+	if [ "$COMMAND" == "ssh-connect" ]; then
+		source .shape.config
+		ssh $remote_user@$remote_host
+	fi
+
+	if [ "$COMMAND" == "configure" ]; then
+		source .shape.config
+		scp  	  ../$project_name/backend.inc $remote_user@$remote_host:$remote_backend_dir/$project_name/conf/backend.inc
+		scp  	  ../$project_name/gateway.inc $remote_user@$remote_host:$remote_gateway_dir/$project_name/conf/gateway.inc
+		scp  	  ../$project_name/DBManager.class.inc $remote_user@$remote_host:$remote_backend_dir/$project_name/kernel/DBManager.class.inc
+	fi
+	if [ "$COMMAND" == "sync" ]; then
+		#cd $PROJECT_NAME;
+		#cd $CURRENT_DIR/$PROJECT_NAME;
+		source .shape.config
+		if [ "$SYNC_TYPE" == "rsync" ]; then
+			rsync -ar ../$project_name/web/* $remote_user@$remote_host:$remote_frontend_dir/$project_name
+			#TODO
+			scp  	  ../$project_name/DBManager.class.inc $remote_user@$remote_host:$remote_backend_dir/$project_name/kernel
+		else 
+			scp -r 	  ../$project_name/web/* $remote_user@$remote_host:$remote_frontend_dir/$project_name
+			#TODO
+			scp  	  ../$project_name/DBManager.class.inc $remote_user@$remote_host:$remote_backend_dir/$project_name/kernel
+		fi
+	fi
+ if [ "$COMMAND" == "sync-resources" ]; then
+      source .shape.config
+                if [ "$SYNC_TYPE" == "rsync" ]; then
+			rsync -ar ../$project_name/resources/* $remote_user@$remote_host:$remote_backend_dir/$project_name/resources
+                else
+			scp      ../$project_name/resources/* $remote_user@$remote_host:$remote_backend_dir/$project_name/resources
+                fi
+        fi
+
+
+	if [ "$COMMAND" == "uninstall" ]; then
+		cd $CURRENT_DIR/$PROJECT_NAME;
+		source .shape.config
+		uninstall_from_remote
+	fi
+	if [ "$COMMAND" == "undeploy" ]; then
+		cd $CURRENT_DIR/$PROJECT_NAME;
+		source .shape.config
+		undeploy_web
+	fi
+#fi

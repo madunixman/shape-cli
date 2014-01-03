@@ -11,8 +11,8 @@ TMPL_DIR=$CURR_DIR/templates
 SYNC_TYPE=rsync
 #SYNC_TYPE=scp
 
-HBF_DISTRO_NAME="hbf"
-HBF_DISTRO_VERSION="1.0"
+HBF_DISTRO_NAME="shape"
+HBF_DISTRO_VERSION="1.1"
 #HBF_PACKAGES_DIR="/Users/paolo/dev/code.hackbook.org/hbf/dist/packages"
 HBF_PACKAGES_DIR=$HOME"/.shape/packages"
 

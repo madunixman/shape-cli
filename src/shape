@@ -1,6 +1,6 @@
 #! /bin/bash 
 
-# Paolo Lulli 2012
+# Paolo Lulli 2012/2015
 
 MAX_RECURSE=20
 CURRENT_DIR=$(pwd)
@@ -12,7 +12,7 @@ SYNC_TYPE=rsync
 #SYNC_TYPE=scp
 
 HBF_DISTRO_NAME="shape"
-HBF_DISTRO_VERSION="1.1"
+HBF_DISTRO_VERSION="1.2"
 #HBF_PACKAGES_DIR="/Users/paolo/dev/code.hackbook.org/hbf/dist/packages"
 HBF_PACKAGES_DIR=$HOME"/.shape/packages"
 
@@ -116,7 +116,10 @@ echo REMOTE_WEB_INSTALL_DIR=$remote_frontend_dir/$PRJNAME >> server.cfg
 
 
 RECURSE=0
-if [ "$#" == "1" ]; then
+#if [ "$#" == "1" ]; then
+if [ "$#" == "0" ]; then
+	echo "No ARGS Given!"
+else
 	cd $CURRENT_DIR
 	while [ ! -f "./.shape.config" ]; do
 		pwd
@@ -168,6 +171,26 @@ echo "ROOT= $SHAPE_ROOT"
 		make_remote_dirs
 		distribute_content
 		unpack_content
+	fi
+	if [ "$COMMAND" == "task" ]; then
+		source .shape.config
+		task list project:$project_name
+	fi
+	if [ "$COMMAND" == "task:add" ]; then
+		source .shape.config
+		task add project:$project_name $2
+	fi
+	if [ "$COMMAND" == "task:mod" ]; then
+		source .shape.config
+		task $2 mod project:$project_name $3
+	fi
+	if [ "$COMMAND" == "task:del" ]; then
+		source .shape.config
+		task $2 del project:$project_name 
+	fi
+	if [ "$COMMAND" == "task:export" ]; then
+		source .shape.config
+		task export  project:$project_name 
 	fi
 	if [ "$COMMAND" == "mysql-backup" ]; then
 		source .shape.config
